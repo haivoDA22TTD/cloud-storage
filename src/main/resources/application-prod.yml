@@ -9,20 +9,22 @@ spring:
       max-request-size: 50MB
   
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require&connectTimeout=30&socketTimeout=30
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 2
+      minimum-idle: 1
+      connection-timeout: 60000
+      validation-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 600000
+      leak-detection-threshold: 60000
   
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     show-sql: false
     properties:
       hibernate:
@@ -58,8 +60,10 @@ logging:
   level:
     root: INFO
     com.example: INFO
-    org.springframework.web: WARN
-    org.springframework.security: WARN
-    org.hibernate.SQL: WARN
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
+    com.zaxxer.hikari: DEBUG
+    org.springframework.jdbc.datasource: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
