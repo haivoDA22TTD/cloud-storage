@@ -99,8 +99,8 @@ public class PasskeyService {
         return convertToDTO(saved);
     }
     
-    public Map<String, Object> startAuthentication(String username) {
-        log.info("Starting passkey authentication for user: {}", username);
+    public Map<String, Object> startAuthentication(String username, String rpId) {
+        log.info("Starting passkey authentication for user: {} with RP ID: {}", username, rpId);
         
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
@@ -124,7 +124,7 @@ public class PasskeyService {
         Map<String, Object> options = new HashMap<>();
         options.put("challenge", challenge);
         options.put("timeout", 60000);
-        options.put("rpId", "localhost");
+        options.put("rpId", rpId);
         options.put("allowCredentials", allowCredentials);
         options.put("userVerification", "preferred");
         
