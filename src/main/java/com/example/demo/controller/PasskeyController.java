@@ -54,9 +54,16 @@ public class PasskeyController {
     }
     
     @PostMapping("/authenticate/start")
-    public ResponseEntity<Map<String, Object>> startAuthentication(@RequestParam String username) {
+    public ResponseEntity<Map<String, Object>> startAuthentication(
+            @RequestParam String username,
+            HttpServletRequest request) {
         log.info("POST /api/passkey/authenticate/start - User: {}", username);
-        Map<String, Object> options = passkeyService.startAuthentication(username);
+        
+        // Get RP ID from request host
+        String rpId = request.getServerName();
+        log.info("Using RP ID: {}", rpId);
+        
+        Map<String, Object> options = passkeyService.startAuthentication(username, rpId);
         return ResponseEntity.ok(options);
     }
     
