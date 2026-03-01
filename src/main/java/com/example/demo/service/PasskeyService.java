@@ -31,8 +31,8 @@ public class PasskeyService {
     private final Map<String, String> registrationChallenges = new HashMap<>();
     private final Map<String, String> authenticationChallenges = new HashMap<>();
     
-    public Map<String, Object> startRegistration(String username) {
-        log.info("Starting passkey registration for user: {}", username);
+    public Map<String, Object> startRegistration(String username, String rpId) {
+        log.info("Starting passkey registration for user: {} with RP ID: {}", username, rpId);
         
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
@@ -45,7 +45,7 @@ public class PasskeyService {
         options.put("challenge", challenge);
         options.put("rp", Map.of(
             "name", "Demo App",
-            "id", "localhost"
+            "id", rpId
         ));
         options.put("user", Map.of(
             "id", Base64.getEncoder().encodeToString(user.getId().toString().getBytes()),
