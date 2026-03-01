@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thùng Rác - Demo App</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .logo {
+            width: 40px;
+            height: 40px;
+        }
+        
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .toolbar {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #f8fafc;
+            color: #1e293b;
+        }
+        
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .file-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        
+        .file-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .file-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            border-radius: 12px;
+            background: #f8fafc;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .file-meta {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 1rem;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-icon {
+            padding: 0.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            color: white;
+        }
+        
+        .btn-restore {
+            background: #10b981;
+        }
+        
+        .btn-delete {
+            background: #ef4444;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            color: #64748b;
+            margin-bottom: 1rem;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            display: none;
+            z-index: 2000;
+        }
+        
+        .toast.success { border-left: 4px solid #10b981; }
+        .toast.error { border-left: 4px solid #ef4444; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo-section">
+            <img src="/logo.svg" alt="Logo" class="logo">
+            <span class="brand">Thùng Rác</span>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="toolbar">
+            <button class="btn btn-secondary" onclick="window.location.href='/files'">
+                <i class="fas fa-arrow-left"></i> Quay lại
+            </button>
+            <button class="btn btn-primary" onclick="emptyTrash()">
+                <i class="fas fa-trash"></i> Dọn sạch thùng rác
+            </button>
+        </div>
+        
+        <div id="filesContainer">
+            <div class="loading">Đang tải...</div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script>
+        loadTrashFiles();
+        
+        async function loadTrashFiles() {
+            try {
+                const response = await fetch('/api/files/trash');
+                const files = await response.json();
+                
+                const container = document.getElementById('filesContainer');
+                
+                if (files.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-trash"></i>
+                            <h3>Thùng rác trống</h3>
+                            <p>Không có file nào trong thùng rác</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <div class="files-grid">
+                        ${files.map(file => `
+                            <div class="file-card">
+                                <div class="file-icon">
+                                    <i class="fas fa-file" style="color: #64748b;"></i>
+                                </div>
+                                <div class="file-name" title="${file.originalFileName}">
+                                    ${file.originalFileName}
+                                </div>
+                                <div class="file-meta">
+                                    <div>${file.fileSizeFormatted}</div>
+                                    <div>Xóa: ${new Date(file.deletedAt).toLocaleDateString('vi-VN')}</div>
+                                </div>
+                                <div class="file-actions">
+                                    <button class="btn-icon btn-restore" onclick="restoreFile(${file.id})" title="Khôi phục">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" onclick="deleteFile(${file.id})" title="Xóa vĩnh viễn">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                showToast('Không thể tải thùng rác', 'error');
+            }
+        }
+        
+        async function restoreFile(id) {
+            try {
+                const response = await fetch(`/api/files/${id}/restore`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    showToast('Khôi phục thành công', 'success');
+                    loadTrashFiles();
+                } else {
+                    throw new Error('Failed');
+                }
+            } catch (error) {
+                showToast('Không thể khôi phục file', 'error');
+            }
+        }
+        
+        async function deleteFile(id) {
+            if (!confirm('Xóa vĩnh viễn file này? Không thể hoàn tác!')) return;
+            
+            try {
+                const response = await fetch(`/api/files/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showToast('Đã xóa vĩnh viễn', 'success');
+                    loadTrashFiles();
+                } else {
+                    throw new Error('Failed');
+                }
+            } catch (error) {
+                showToast('Không thể xóa file', 'error');
+            }
+        }
+        
+        async function emptyTrash() {
+            if (!confirm('Xóa tất cả file trong thùng rác? Không thể hoàn tác!')) return;
+            
+            try {
+                const response = await fetch('/api/files/trash');
+                const files = await response.json();
+                
+                for (const file of files) {
+                    await fetch(`/api/files/${file.id}`, { method: 'DELETE' });
+                }
+                
+                showToast('Đã dọn sạch thùng rác', 'success');
+                loadTrashFiles();
+            } catch (error) {
+                showToast('Không thể dọn thùng rác', 'error');
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.style.display = 'block';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>Quản Lý File</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .header { background: white; padding: 1rem 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: bold; color: #667eea; }
+        .nav a { margin: 0 1rem; text-decoration: none; color: #333; }
+        .nav a:hover { color: #667eea; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; }
+        .toolbar { background: white; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+        .search { flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; }
+        .files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+        .file-card { background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .file-icon { font-size: 3rem; text-align: center; margin-bottom: 0.5rem; }
+        .file-name { font-weight: 600; margin-bottom: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-meta { font-size: 0.85rem; color: #666; margin-bottom: 0.5rem; }
+        .file-actions { display: flex; gap: 0.5rem; }
+        .file-actions button { flex: 1; padding: 0.4rem; font-size: 0.85rem; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal-content { background: white; max-width: 500px; margin: 10% auto; padding: 2rem; border-radius: 8px; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        .form-group input { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; }
+        .upload-area { border: 2px dashed #ddd; padding: 2rem; text-align: center; border-radius: 8px; cursor: pointer; }
+        .upload-area:hover { border-color: #667eea; background: #f9f9f9; }
+        .toast { position: fixed; bottom: 2rem; right: 2rem; background: white; padding: 1rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: none; }
+        .toast.success { border-left: 4px solid #10b981; }
+        .toast.error { border-left: 4px solid #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">📁 Quản Lý File</div>
+        <div class="nav">
+            <a href="/">Trang chủ</a>
+            <a href="/files">File của tôi</a>
+            <a href="/trash">Thùng rác</a>
+            <span sec:authentication="name">User</span>
+            <form th:action="@{/logout}" method="post" style="display: inline;">
+                <button class="btn btn-danger">Đăng xuất</button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="openUploadModal()">
+                <i class="fas fa-upload"></i> Tải lên
+            </button>
+            <button class="btn btn-primary" onclick="openCreateFolderModal()">
+                <i class="fas fa-folder-plus"></i> Tạo thư mục
+            </button>
+            <button class="btn" onclick="window.location.href='/trash'">
+                <i class="fas fa-trash"></i> Thùng rác
+            </button>
+            <input type="text" class="search" id="searchInput" placeholder="Tìm kiếm..." onkeyup="searchFiles()">
+        </div>
+        
+        <div id="breadcrumb" style="background: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            🏠 Trang chủ
+        </div>
+        
+        <div id="filesContainer">
+            <p>Đang tải...</p>
+        </div>
+    </div>
+    
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <h2>Tải lên file</h2>
+            <p style="color: #666; margin-bottom: 1rem;">Giới hạn: 50MB mỗi file</p>
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <p>Kéo thả file vào đây hoặc click để chọn</p>
+                <input type="file" id="fileInput" style="display: none;" multiple>
+            </div>
+            <br>
+            <button class="btn btn-primary" onclick="closeUploadModal()">Đóng</button>
+        </div>
+    </div>
+    
+    <div id="createFolderModal" class="modal">
+        <div class="modal-content">
+            <h2>Tạo thư mục mới</h2>
+            <div class="form-group">
+                <label>Tên thư mục</label>
+                <input type="text" id="folderName" placeholder="Nhập tên thư mục...">
+            </div>
+            <button class="btn btn-primary" onclick="createFolder()">Tạo</button>
+            <button class="btn" onclick="closeCreateFolderModal()">Hủy</button>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script>
+        let allFiles = [];
+        let allFolders = [];
+        let currentFolder = null;
+        let folderPath = [];
+        
+        loadFiles();
+        loadFolders();
+        updateBreadcrumb();
+        
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+        
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                allFiles = await response.json();
+                allFiles = allFiles.filter(f => !f.isDeleted);
+                renderContent();
+            } catch (error) {
+                showToast('Không thể tải file', 'error');
+            }
+        }
+        
+        async function loadFolders() {
+            try {
+                const response = await fetch('/api/folders');
+                allFolders = await response.json();
+                renderContent();
+            } catch (error) {
+                console.error('Không thể tải thư mục', error);
+            }
+        }
+        
+        function updateBreadcrumb() {
+            const breadcrumb = document.getElementById('breadcrumb');
+            if (!breadcrumb) return;
+            
+            let html = '<a href="#" onclick="navigateToRoot(); return false;" style="color: #667eea; text-decoration: none;">🏠 Trang chủ</a>';
+            
+            folderPath.forEach((folder, index) => {
+                html += ` / <a href="#" onclick="navigateToFolder(${index}); return false;" style="color: #667eea; text-decoration: none;">${folder.name}</a>`;
+            });
+            
+            breadcrumb.innerHTML = html;
+        }
+        
+        function navigateToRoot() {
+            currentFolder = null;
+            folderPath = [];
+            updateBreadcrumb();
+            renderContent();
+        }
+        
+        function navigateToFolder(index) {
+            if (index === -1) {
+                navigateToRoot();
+                return;
+            }
+            
+            folderPath = folderPath.slice(0, index + 1);
+            currentFolder = folderPath[folderPath.length - 1];
+            updateBreadcrumb();
+            renderContent();
+        }
+        
+        function openFolder(folder) {
+            currentFolder = folder;
+            folderPath.push(folder);
+            updateBreadcrumb();
+            renderContent();
+        }
+        
+        function renderContent() {
+            const container = document.getElementById('filesContainer');
+            
+            // Filter folders and files for current location
+            const currentFolders = allFolders.filter(f => {
+                if (!currentFolder) {
+                    return !f.path.includes('/');
+                }
+                return f.path.startsWith(currentFolder.path + '/') && 
+                       f.path.split('/').length === currentFolder.path.split('/').length + 1;
+            });
+            
+            const currentFiles = allFiles.filter(f => {
+                if (!currentFolder) {
+                    return !f.folderPath;
+                }
+                return f.folderPath === currentFolder.path;
+            });
+            
+            if (currentFolders.length === 0 && currentFiles.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 3rem; color: #666;">Thư mục trống</p>';
+                return;
+            }
+            
+            let html = '<div class="files-grid">';
+            
+            // Render folders first
+            currentFolders.forEach(folder => {
+                html += `
+                    <div class="file-card" style="border: 2px solid #667eea; cursor: pointer;" ondblclick="openFolder(${JSON.stringify(folder).replace(/"/g, '&quot;')})">
+                        <div class="file-icon" style="font-size: 3.5rem;">📁</div>
+                        <div class="file-name" title="${folder.name}">${folder.name}</div>
+                        <div class="file-meta">${new Date(folder.createdAt).toLocaleDateString('vi-VN')}</div>
+                        <div class="file-actions">
+                            <button class="btn btn-danger" onclick="event.stopPropagation(); deleteFolder(${folder.id})" style="width: 100%;">
+                                <i class="fas fa-trash"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // Render files
+            currentFiles.forEach(file => {
+                html += `
+                    <div class="file-card">
+                        <div class="file-icon">${getFileIcon(file.contentType)}</div>
+                        <div class="file-name" title="${file.originalFileName}">${file.originalFileName}</div>
+                        <div class="file-meta">${file.fileSizeFormatted}</div>
+                        <div class="file-actions">
+                            <button class="btn btn-primary" onclick="downloadFile(${file.id}, '${escapeHtml(file.originalFileName)}')">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn btn-danger" onclick="moveToTrash(${file.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function getFileIcon(contentType) {
+            if (contentType.includes('image')) return '🖼️';
+            if (contentType.includes('pdf')) return '📄';
+            if (contentType.includes('word')) return '📝';
+            if (contentType.includes('excel')) return '📊';
+            if (contentType.includes('zip')) return '📦';
+            if (contentType.includes('video')) return '🎥';
+            if (contentType.includes('audio')) return '🎵';
+            return '📄';
+        }
+        
+        function openUploadModal() {
+            document.getElementById('uploadModal').style.display = 'block';
+        }
+        
+        function closeUploadModal() {
+            document.getElementById('uploadModal').style.display = 'none';
+        }
+        
+        function openCreateFolderModal() {
+            document.getElementById('createFolderModal').style.display = 'block';
+        }
+        
+        function closeCreateFolderModal() {
+            document.getElementById('createFolderModal').style.display = 'none';
+            document.getElementById('folderName').value = '';
+        }
+        
+        async function createFolder() {
+            const name = document.getElementById('folderName').value.trim();
+            if (!name) {
+                showToast('Vui lòng nhập tên thư mục', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/folders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: name, 
+                        parentId: currentFolder ? currentFolder.id : null 
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to create folder');
+                }
+                
+                showToast('Tạo thư mục thành công', 'success');
+                closeCreateFolderModal();
+                loadFolders();
+            } catch (error) {
+                showToast('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteFolder(id) {
+            if (!confirm('Xóa thư mục này?')) return;
+            
+            try {
+                const response = await fetch(`/api/folders/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showToast('Đã xóa thư mục', 'success');
+                    loadFolders();
+                } else {
+                    throw new Error('Failed');
+                }
+            } catch (error) {
+                showToast('Không thể xóa thư mục', 'error');
+            }
+        }
+        
+        async function handleFiles(files) {
+            for (let file of files) {
+                // Kiểm tra kích thước file
+                if (file.size > 50 * 1024 * 1024) {
+                    showToast(`File ${file.name} vượt quá 50MB`, 'error');
+                    continue;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // Add folder path if in a folder
+                if (currentFolder) {
+                    formData.append('folderPath', currentFolder.path);
+                }
+                
+                try {
+                    const response = await fetch('/api/files', { 
+                        method: 'POST', 
+                        body: formData 
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Upload failed');
+                    }
+                } catch (error) {
+                    showToast(`Lỗi tải lên ${file.name}: ${error.message}`, 'error');
+                    return;
+                }
+            }
+            showToast('Tải lên thành công', 'success');
+            closeUploadModal();
+            loadFiles();
+        }
+        
+        async function downloadFile(id, filename) {
+            try {
+                const response = await fetch(`/api/files/${id}/download`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                showToast('Lỗi tải xuống', 'error');
+            }
+        }
+        
+        async function moveToTrash(id) {
+            if (!confirm('Chuyển vào thùng rác?')) return;
+            
+            try {
+                await fetch(`/api/files/${id}/trash`, { method: 'POST' });
+                showToast('Đã chuyển vào thùng rác', 'success');
+                loadFiles();
+            } catch (error) {
+                showToast('Lỗi xóa file', 'error');
+            }
+        }
+        
+        function searchFiles() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.file-card');
+            cards.forEach(card => {
+                const name = card.querySelector('.file-name').textContent.toLowerCase();
+                card.style.display = name.includes(query) ? 'block' : 'none';
+            });
+        }
+        
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+        
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

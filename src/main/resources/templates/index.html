@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo App - Users</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { color: #333; margin: 0; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn {
+            padding: 8px 16px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .logout-btn:hover { background: #d32f2f; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #4CAF50; color: white; }
+        tr:hover { background-color: #f5f5f5; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .badge-success { background-color: #4CAF50; color: white; }
+        .badge-danger { background-color: #f44336; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Hệ Thống Quản Lý Người Dùng</h1>
+        <div class="user-info">
+            <span>Xin chào, <strong sec:authentication="name">User</strong></span>
+            <form th:action="@{/logout}" method="post" style="margin: 0;">
+                <button type="submit" class="logout-btn">Đăng xuất</button>
+            </form>
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <a href="/" style="color: #667eea; text-decoration: none; margin-right: 15px;">Trang chủ</a>
+        <a href="/files" style="color: #667eea; text-decoration: none; margin-right: 15px;">File của tôi</a>
+        <a href="/passkey-setup" style="color: #667eea; text-decoration: none;">🔐 Thiết lập Passkey</a>
+    </div>
+    
+    <p>Tổng số người dùng: <strong th:text="${#lists.size(users)}">0</strong></p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Tên đăng nhập</th>
+                <th>Email</th>
+                <th>Vai trò</th>
+                <th>Trạng thái</th>
+                <th>Ngày tạo</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="user : ${users}">
+                <td th:text="${user.id}">1</td>
+                <td th:text="${user.username}">john_doe</td>
+                <td th:text="${user.email}">john@example.com</td>
+                <td th:text="${user.role}">USER</td>
+                <td>
+                    <span th:class="${user.enabled ? 'badge badge-success' : 'badge badge-danger'}"
+                          th:text="${user.enabled ? 'Hoạt động' : 'Vô hiệu'}">Hoạt động</span>
+                </td>
+                <td th:text="${#temporals.format(user.createdAt, 'dd/MM/yyyy HH:mm')}">01/01/2024 12:00</td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(users)}">
+                <td colspan="6" style="text-align: center;">Chưa có người dùng nào</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div style="margin-top: 30px;">
+        <h3>API Endpoints:</h3>
+        <ul>
+            <li>GET /api/users - Lấy danh sách người dùng</li>
+            <li>GET /api/users/{id} - Lấy thông tin người dùng</li>
+            <li>POST /api/users - Tạo người dùng mới</li>
+            <li>DELETE /api/users/{id} - Xóa người dùng</li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: demo-app
+    env: java
+    buildCommand: mvn clean package -DskipTests
+    startCommand: java -Dspring.profiles.active=prod -jar target/*.jar
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_HOST
+        value: pg-960641-chihaiv961-ae30.e.aivencloud.com
+      - key: DB_PORT
+        value: 24729
+      - key: DB_NAME
+        value: defaultdb
+      - key: DB_USER
+        value: avnadmin
+      - key: DB_PASSWORD
+        sync: false
+      - key: PORT
+        value: 8080
+    healthCheckPath: /actuator/health
+    autoDeploy: true
