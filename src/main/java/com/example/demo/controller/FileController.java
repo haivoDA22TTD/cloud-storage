@@ -73,6 +73,23 @@ public class FileController {
                 .body(resource);
     }
     
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<Resource> previewFile(
+            @PathVariable Long id,
+            Authentication authentication) {
+        
+        log.info("GET /api/files/{}/preview - Previewing file by user: {}", 
+                id, authentication.getName());
+        
+        Resource resource = fileStorageService.downloadFile(id, authentication.getName());
+        FileDTO fileInfo = fileStorageService.getFileInfo(id, authentication.getName());
+        
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(fileInfo.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .body(resource);
+    }
+    
     @PostMapping("/{id}/trash")
     public ResponseEntity<Void> moveToTrash(
             @PathVariable Long id,

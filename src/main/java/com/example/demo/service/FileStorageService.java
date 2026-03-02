@@ -7,6 +7,7 @@ import com.example.demo.exception.AccessDeniedException;
 import com.example.demo.exception.FileStorageException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.FileRepository;
+import com.example.demo.repository.FileShareRepository;
 import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ public class FileStorageService {
     
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
+    private final FileShareRepository fileShareRepository;
     
     @Transactional
     public FileDTO uploadFile(MultipartFile file, String username, String folderPath) {
@@ -173,18 +175,21 @@ public class FileStorageService {
         FileEntity fileEntity = fileRepository.findById(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found with id: " + fileId));
         
-        // Check ownership
-        if (!fileEntity.getOwner().getId().equals(user.getId())) {
-            log.warn("User {} attempted to access file {} owned by {}", 
-                    username, fileId, fileEntity.getOwner().getUsername());
+        // Check ownership or shared access
+        boolean isOwner = fileEntity.getOwner().getId().equals(user.getId());
+        boolean isShared = fileShareRepository.existsByFileAndSharedWith(fileEntity, user);
+        
+        if (!isOwner && !isShared) {
+            log.warn("User {} attempted to access file {} without permission", username, fileId);
             throw new AccessDeniedException("You don't have permission to access this file");
         }
         
         try {
             Path filePath = Paths.get(fileEntity.getFilePath()).normalize();
             
-            // Prevent path traversal
-            if (!filePath.startsWith(Paths.get(BASE_UPLOAD_DIR, user.getId().toString()))) {
+            // For shared files, use owner's directory
+            String ownerIdStr = fileEntity.getOwner().getId().toString();
+            if (!filePath.startsWith(Paths.get(BASE_UPLOAD_DIR, ownerIdStr))) {
                 log.error("Path traversal attempt detected: {}", filePath);
                 throw new AccessDeniedException("Invalid file path");
             }

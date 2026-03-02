@@ -24,4 +24,7 @@ public class FileDTO {
     private String ownerUsername;
     private LocalDateTime uploadedAt;
     private LocalDateTime deletedAt;
+    private Long folderId;
+    private String folderName;
+    private String sharedPermission; // "view" or "edit" if shared
 }

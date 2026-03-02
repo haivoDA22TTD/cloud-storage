@@ -52,6 +52,12 @@
     
     <div class="container">
         <div class="toolbar">
+            <button class="btn btn-primary" onclick="showTab('my-files')">
+                <i class="fas fa-folder"></i> File Của Tôi
+            </button>
+            <button class="btn btn-primary" onclick="showTab('shared-files')">
+                <i class="fas fa-share"></i> File Được Chia Sẻ
+            </button>
             <button class="btn btn-primary" onclick="openUploadModal()">
                 <i class="fas fa-upload"></i> Tải lên
             </button>
@@ -98,6 +104,33 @@
         </div>
     </div>
     
+    <div id="shareModal" class="modal">
+        <div class="modal-content">
+            <h2>🔗 Chia Sẻ File</h2>
+            <p id="shareFileName" style="color: #666; margin-bottom: 1rem;"></p>
+            <div class="form-group">
+                <label>Tên người dùng</label>
+                <input type="text" id="shareUsername" placeholder="Nhập tên người dùng...">
+            </div>
+            <div class="form-group">
+                <label>Quyền</label>
+                <select id="sharePermission" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="view">Chỉ xem</option>
+                    <option value="edit">Xem và chỉnh sửa</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="submitShare()">Chia Sẻ</button>
+            <button class="btn" onclick="closeShareModal()">Hủy</button>
+        </div>
+    </div>
+    
+    <div id="previewModal" class="modal" style="background: rgba(0,0,0,0.9);" onclick="closePreviewModal()">
+        <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+            <button onclick="closePreviewModal()" style="position: absolute; top: 20px; right: 20px; background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; z-index: 10;">✕</button>
+            <div id="previewContent" onclick="event.stopPropagation()" style="max-width: 90%; max-height: 90%;"></div>
+        </div>
+    </div>
+    
     <div id="toast" class="toast"></div>
     
     <script>
@@ -105,6 +138,8 @@
         let allFolders = [];
         let currentFolder = null;
         let folderPath = [];
+        let currentTab = 'my-files';
+        let currentShareFileId = null;
         
         loadFiles();
         loadFolders();
@@ -219,15 +254,18 @@
             // Render files
             currentFiles.forEach(file => {
                 html += `
-                    <div class="file-card">
+                    <div class="file-card" ondblclick="previewFile(${file.id}, '${file.contentType}')">
                         <div class="file-icon">${getFileIcon(file.contentType)}</div>
                         <div class="file-name" title="${file.originalFileName}">${file.originalFileName}</div>
                         <div class="file-meta">${file.fileSizeFormatted}</div>
                         <div class="file-actions">
-                            <button class="btn btn-primary" onclick="downloadFile(${file.id}, '${escapeHtml(file.originalFileName)}')">
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); shareFile(${file.id}, '${escapeHtml(file.originalFileName)}')" title="Chia sẻ">
+                                <i class="fas fa-share"></i>
+                            </button>
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.originalFileName)}')">
                                 <i class="fas fa-download"></i>
                             </button>
-                            <button class="btn btn-danger" onclick="moveToTrash(${file.id})">
+                            <button class="btn btn-danger" onclick="event.stopPropagation(); moveToTrash(${file.id})">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -400,6 +438,148 @@
             toast.className = 'toast ' + type;
             toast.style.display = 'block';
             setTimeout(() => toast.style.display = 'none', 3000);
+        }
+        
+        async function showTab(tab) {
+            currentTab = tab;
+            if (tab === 'shared-files') {
+                await loadSharedFiles();
+            } else {
+                loadFiles();
+            }
+        }
+        
+        async function loadSharedFiles() {
+            try {
+                const response = await fetch('/api/shares/shared-with-me');
+                const files = await response.json();
+                renderSharedFiles(files);
+            } catch (error) {
+                showToast('Không thể tải file được chia sẻ', 'error');
+            }
+        }
+        
+        function renderSharedFiles(files) {
+            const container = document.getElementById('filesContainer');
+            
+            if (files.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 3rem; color: #666;">Chưa có file nào được chia sẻ</p>';
+                return;
+            }
+            
+            let html = '<div class="files-grid">';
+            
+            files.forEach(file => {
+                html += `
+                    <div class="file-card" ondblclick="previewFile(${file.id}, '${file.contentType}')">
+                        <div class="file-icon">${getFileIcon(file.contentType)}</div>
+                        <div class="file-name" title="${file.fileName}">${file.fileName}</div>
+                        <div class="file-meta">${file.fileSizeFormatted || formatFileSize(file.fileSize)}</div>
+                        <div style="background: #48bb78; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; text-align: center; margin: 0.5rem 0;">
+                            Được chia sẻ
+                        </div>
+                        <div class="file-actions">
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.fileName)}')">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+        
+        function shareFile(fileId, fileName) {
+            currentShareFileId = fileId;
+            document.getElementById('shareFileName').textContent = `File: ${fileName}`;
+            document.getElementById('shareModal').style.display = 'block';
+        }
+        
+        function closeShareModal() {
+            document.getElementById('shareModal').style.display = 'none';
+            document.getElementById('shareUsername').value = '';
+            currentShareFileId = null;
+        }
+        
+        async function submitShare() {
+            const username = document.getElementById('shareUsername').value.trim();
+            const permission = document.getElementById('sharePermission').value;
+            
+            if (!username) {
+                showToast('Vui lòng nhập tên người dùng', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/shares', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileId: currentShareFileId,
+                        sharedWithUsername: username,
+                        permission: permission
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Chia sẻ thất bại');
+                }
+                
+                showToast('Chia sẻ thành công!', 'success');
+                closeShareModal();
+            } catch (error) {
+                showToast('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        function previewFile(fileId, contentType) {
+            const previewableTypes = [
+                'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+                'application/pdf',
+                'text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json',
+                'video/mp4', 'video/webm', 'video/ogg'
+            ];
+            
+            const canPreview = previewableTypes.some(type => contentType.includes(type));
+            
+            if (!canPreview) {
+                showToast('Loại file này không hỗ trợ xem trước', 'error');
+                return;
+            }
+            
+            const previewUrl = `/api/files/${fileId}/preview`;
+            const previewContent = document.getElementById('previewContent');
+            
+            let content = '';
+            
+            if (contentType.startsWith('image/')) {
+                content = `<img src="${previewUrl}" style="max-width: 90vw; max-height: 90vh; object-fit: contain;">`;
+            } else if (contentType === 'application/pdf') {
+                content = `<iframe src="${previewUrl}" style="width: 90vw; height: 90vh; border: none; background: white;"></iframe>`;
+            } else if (contentType.startsWith('video/')) {
+                content = `<video controls style="max-width: 90vw; max-height: 90vh;">
+                            <source src="${previewUrl}" type="${contentType}">
+                           </video>`;
+            } else if (contentType.startsWith('text/') || contentType.includes('json')) {
+                content = `<iframe src="${previewUrl}" style="width: 90vw; height: 90vh; border: none; background: white;"></iframe>`;
+            }
+            
+            previewContent.innerHTML = content;
+            document.getElementById('previewModal').style.display = 'block';
+        }
+        
+        function closePreviewModal() {
+            document.getElementById('previewModal').style.display = 'none';
+            document.getElementById('previewContent').innerHTML = '';
         }
         
         window.onclick = function(event) {

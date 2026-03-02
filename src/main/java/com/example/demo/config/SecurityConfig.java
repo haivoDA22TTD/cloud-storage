@@ -25,12 +25,13 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/login", "/register", "/passkey-login", "/css/**", "/js/**", "/actuator/health").permitAll()
+                .requestMatchers("/login", "/register", "/passkey-login", "/css/**", "/js/**", "/actuator/health", "/api/health/**").permitAll()
                 .requestMatchers("/api/users/**").permitAll()
                 .requestMatchers("/api/passkey/authenticate/**").permitAll()
                 .requestMatchers("/api/passkey/**").authenticated()
                 .requestMatchers("/api/files/**").authenticated()
                 .requestMatchers("/api/folders/**").authenticated()
+                .requestMatchers("/api/shares/**").authenticated()
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
