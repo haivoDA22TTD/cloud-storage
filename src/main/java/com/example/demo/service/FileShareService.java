@@ -162,13 +162,13 @@ public class FileShareService {
         return FileDTO.builder()
                 .id(file.getId())
                 .fileName(file.getFileName())
+                .originalFileName(file.getOriginalFileName())
                 .fileSize(file.getFileSize())
                 .contentType(file.getContentType())
                 .uploadedAt(file.getUploadedAt())
-                .folderId(file.getFolder() != null ? file.getFolder().getId() : null)
-                .folderName(file.getFolder() != null ? file.getFolder().getName() : null)
+                .folderPath(file.getFolderPath())
                 .isDeleted(file.getIsDeleted())
-                .sharedPermission(permission) // Add permission info
+                .sharedPermission(permission)
                 .build();
     }
 }
