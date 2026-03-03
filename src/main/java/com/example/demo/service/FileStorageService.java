@@ -245,6 +245,10 @@ public class FileStorageService {
             throw new AccessDeniedException("You don't have permission to delete this file");
         }
         
+        // Delete all shares first (to avoid foreign key constraint)
+        fileShareRepository.deleteByFile(fileEntity);
+        log.info("Deleted all shares for file: {}", fileId);
+        
         // Delete file from Cloudinary if exists
         if (fileEntity.getCloudinaryPublicId() != null) {
             try {
@@ -280,8 +284,11 @@ public class FileStorageService {
         FileEntity fileEntity = fileRepository.findById(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found with id: " + fileId));
         
-        // Check ownership
-        if (!fileEntity.getOwner().getId().equals(user.getId())) {
+        // Check ownership or shared access
+        boolean isOwner = fileEntity.getOwner().getId().equals(user.getId());
+        boolean isShared = fileShareRepository.existsByFileAndSharedWith(fileEntity, user);
+        
+        if (!isOwner && !isShared) {
             throw new AccessDeniedException("You don't have permission to access this file");
         }
         

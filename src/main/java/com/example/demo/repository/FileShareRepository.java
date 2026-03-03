@@ -19,4 +19,6 @@ public interface FileShareRepository extends JpaRepository<FileShare, Long> {
     Optional<FileShare> findByFileAndSharedWith(FileEntity file, User user);
     
     boolean existsByFileAndSharedWith(FileEntity file, User user);
+    
+    void deleteByFile(FileEntity file);
 }
