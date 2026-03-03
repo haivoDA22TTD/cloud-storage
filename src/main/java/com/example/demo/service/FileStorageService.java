@@ -120,7 +120,15 @@ public class FileStorageService {
         FileEntity fileEntity = fileRepository.findById(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found with id: " + fileId));
         
-        if (!fileEntity.getOwner().getId().equals(user.getId())) {
+        // Check if owner
+        boolean isOwner = fileEntity.getOwner().getId().equals(user.getId());
+        
+        // Check if has edit permission
+        boolean hasEditPermission = fileShareRepository.findByFileAndSharedWith(fileEntity, user)
+                .map(share -> "edit".equals(share.getPermission()))
+                .orElse(false);
+        
+        if (!isOwner && !hasEditPermission) {
             throw new AccessDeniedException("You don't have permission to delete this file");
         }
         
@@ -187,18 +195,27 @@ public class FileStorageService {
         try {
             Path filePath = Paths.get(fileEntity.getFilePath()).normalize();
             
-            // For shared files, use owner's directory
+            log.info("Attempting to load file from path: {}", filePath);
+            log.info("File exists: {}, Is absolute: {}", Files.exists(filePath), filePath.isAbsolute());
+            
+            // For shared files, validate path belongs to owner
             String ownerIdStr = fileEntity.getOwner().getId().toString();
-            if (!filePath.startsWith(Paths.get(BASE_UPLOAD_DIR, ownerIdStr))) {
-                log.error("Path traversal attempt detected: {}", filePath);
+            Path expectedBasePath = Paths.get(BASE_UPLOAD_DIR, ownerIdStr).toAbsolutePath().normalize();
+            Path absoluteFilePath = filePath.isAbsolute() ? filePath : filePath.toAbsolutePath().normalize();
+            
+            if (!absoluteFilePath.startsWith(expectedBasePath)) {
+                log.error("Path traversal attempt detected. File path: {}, Expected base: {}", 
+                         absoluteFilePath, expectedBasePath);
                 throw new AccessDeniedException("Invalid file path");
             }
             
-            Resource resource = new UrlResource(filePath.toUri());
+            Resource resource = new UrlResource(absoluteFilePath.toUri());
             if (resource.exists() && resource.isReadable()) {
+                log.info("File loaded successfully: {}", absoluteFilePath);
                 return resource;
             } else {
-                log.error("File not found or not readable: {}", filePath);
+                log.error("File not found or not readable: {}. Exists: {}, Readable: {}", 
+                         absoluteFilePath, Files.exists(absoluteFilePath), Files.isReadable(absoluteFilePath));
                 throw new ResourceNotFoundException("File not found or not readable");
             }
         } catch (IOException e) {

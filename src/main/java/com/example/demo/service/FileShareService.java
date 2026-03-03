@@ -146,6 +146,44 @@ public class FileShareService {
         return fileShareRepository.existsByFileAndSharedWith(file, user);
     }
     
+    @Transactional(readOnly = true)
+    public boolean canEditFile(Long fileId, String username) {
+        FileEntity file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found"));
+        
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        // Owner can always edit
+        if (file.getOwner().getId().equals(user.getId())) {
+            return true;
+        }
+        
+        // Check if shared with edit permission
+        return fileShareRepository.findByFileAndSharedWith(file, user)
+                .map(share -> "edit".equals(share.getPermission()))
+                .orElse(false);
+    }
+    
+    @Transactional(readOnly = true)
+    public String getPermission(Long fileId, String username) {
+        FileEntity file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found"));
+        
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        // Owner has full permission
+        if (file.getOwner().getId().equals(user.getId())) {
+            return "owner";
+        }
+        
+        // Get shared permission
+        return fileShareRepository.findByFileAndSharedWith(file, user)
+                .map(FileShare::getPermission)
+                .orElse(null);
+    }
+    
     private FileShareDTO convertToDTO(FileShare share) {
         return FileShareDTO.builder()
                 .id(share.getId())

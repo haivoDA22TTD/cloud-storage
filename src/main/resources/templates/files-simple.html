@@ -470,18 +470,28 @@
             let html = '<div class="files-grid">';
             
             files.forEach(file => {
+                const permission = file.sharedPermission || 'view';
+                const permissionBadge = permission === 'edit' 
+                    ? '<div style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; text-align: center; margin: 0.5rem 0;">Có thể chỉnh sửa</div>'
+                    : '<div style="background: #48bb78; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; text-align: center; margin: 0.5rem 0;">Chỉ xem</div>';
+                
+                const deleteButton = permission === 'edit'
+                    ? `<button class="btn btn-danger" onclick="event.stopPropagation(); moveToTrash(${file.id})" title="Xóa">
+                        <i class="fas fa-trash"></i>
+                       </button>`
+                    : '';
+                
                 html += `
                     <div class="file-card" ondblclick="previewFile(${file.id}, '${file.contentType}')">
                         <div class="file-icon">${getFileIcon(file.contentType)}</div>
                         <div class="file-name" title="${file.fileName}">${file.fileName}</div>
                         <div class="file-meta">${file.fileSizeFormatted || formatFileSize(file.fileSize)}</div>
-                        <div style="background: #48bb78; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; text-align: center; margin: 0.5rem 0;">
-                            Được chia sẻ
-                        </div>
+                        ${permissionBadge}
                         <div class="file-actions">
-                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.fileName)}')">
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.fileName)}')" title="Tải xuống">
                                 <i class="fas fa-download"></i>
                             </button>
+                            ${deleteButton}
                         </div>
                     </div>
                 `;
