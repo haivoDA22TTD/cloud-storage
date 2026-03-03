@@ -33,6 +33,13 @@ public class FileEntity {
     @Column
     private String folderPath;
     
+    // Cloudinary fields
+    @Column
+    private String cloudinaryPublicId;
+    
+    @Column
+    private String cloudinaryUrl;
+    
     @Column(nullable = false)
     private String contentType;
     

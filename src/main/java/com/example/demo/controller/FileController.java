@@ -130,4 +130,16 @@ public class FileController {
         fileStorageService.deleteFile(id, authentication.getName());
         return ResponseEntity.noContent().build();
     }
+    
+    @PostMapping("/{id}/copy-to-my-folder")
+    public ResponseEntity<FileDTO> copySharedFileToMyFolder(
+            @PathVariable Long id,
+            @RequestParam(value = "folderPath", required = false) String folderPath,
+            Authentication authentication) {
+        
+        log.info("POST /api/files/{}/copy-to-my-folder - User: {}", id, authentication.getName());
+        
+        FileDTO copiedFile = fileStorageService.copySharedFileToMyFolder(id, authentication.getName(), folderPath);
+        return ResponseEntity.ok(copiedFile);
+    }
 }

@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,6 +38,7 @@ public class FileStorageService {
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
     private final FileShareRepository fileShareRepository;
+    private final CloudinaryService cloudinaryService;
     
     @Transactional
     public FileDTO uploadFile(MultipartFile file, String username, String folderPath) {
@@ -49,52 +51,45 @@ public class FileStorageService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
         
-        // Generate unique filename
         String originalFileName = file.getOriginalFilename();
-        String fileExtension = getFileExtension(originalFileName);
-        String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
-        
-        // Create user directory with folder path
-        Path userDirectory;
-        if (folderPath != null && !folderPath.isEmpty()) {
-            userDirectory = Paths.get(BASE_UPLOAD_DIR, user.getId().toString(), folderPath);
-        } else {
-            userDirectory = Paths.get(BASE_UPLOAD_DIR, user.getId().toString());
-        }
         
         try {
-            Files.createDirectories(userDirectory);
+            // Upload to Cloudinary
+            String cloudinaryFolder = "user_" + user.getId();
+            if (folderPath != null && !folderPath.isEmpty()) {
+                cloudinaryFolder += "/" + folderPath.replace("\\", "/");
+            }
+            
+            Map<String, Object> uploadResult = cloudinaryService.uploadFile(file, cloudinaryFolder);
+            
+            String cloudinaryUrl = (String) uploadResult.get("secure_url");
+            String publicId = (String) uploadResult.get("public_id");
+            
+            log.info("File uploaded to Cloudinary. URL: {}, Public ID: {}", cloudinaryUrl, publicId);
+            
+            // Save metadata to database
+            FileEntity fileEntity = FileEntity.builder()
+                    .fileName((String) uploadResult.get("original_filename"))
+                    .originalFileName(originalFileName)
+                    .filePath(cloudinaryUrl) // Store URL for backward compatibility
+                    .cloudinaryUrl(cloudinaryUrl)
+                    .cloudinaryPublicId(publicId)
+                    .folderPath(folderPath)
+                    .contentType(file.getContentType())
+                    .fileSize(file.getSize())
+                    .isDeleted(false)
+                    .owner(user)
+                    .build();
+            
+            FileEntity savedFile = fileRepository.save(fileEntity);
+            log.info("File metadata saved with id: {}", savedFile.getId());
+            
+            return convertToDTO(savedFile);
+            
         } catch (IOException e) {
-            log.error("Failed to create directory: {}", userDirectory, e);
-            throw new FileStorageException("Failed to create upload directory", e);
+            log.error("Failed to upload file to Cloudinary", e);
+            throw new FileStorageException("Failed to upload file to cloud storage", e);
         }
-        
-        // Save file to disk
-        Path filePath = userDirectory.resolve(uniqueFileName);
-        try {
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("File saved to: {}", filePath);
-        } catch (IOException e) {
-            log.error("Failed to save file: {}", filePath, e);
-            throw new FileStorageException("Failed to save file", e);
-        }
-        
-        // Save metadata to database
-        FileEntity fileEntity = FileEntity.builder()
-                .fileName(uniqueFileName)
-                .originalFileName(originalFileName)
-                .filePath(filePath.toString())
-                .folderPath(folderPath)
-                .contentType(file.getContentType())
-                .fileSize(file.getSize())
-                .isDeleted(false)
-                .owner(user)
-                .build();
-        
-        FileEntity savedFile = fileRepository.save(fileEntity);
-        log.info("File metadata saved with id: {}", savedFile.getId());
-        
-        return convertToDTO(savedFile);
     }
     
     @Transactional(readOnly = true)
@@ -193,12 +188,17 @@ public class FileStorageService {
         }
         
         try {
+            // If file is stored on Cloudinary, redirect to Cloudinary URL
+            if (fileEntity.getCloudinaryUrl() != null) {
+                log.info("File is on Cloudinary: {}", fileEntity.getCloudinaryUrl());
+                return new UrlResource(fileEntity.getCloudinaryUrl());
+            }
+            
+            // Fallback to local storage (for old files)
             Path filePath = Paths.get(fileEntity.getFilePath()).normalize();
             
-            log.info("Attempting to load file from path: {}", filePath);
-            log.info("File exists: {}, Is absolute: {}", Files.exists(filePath), filePath.isAbsolute());
+            log.info("Attempting to load file from local path: {}", filePath);
             
-            // For shared files, validate path belongs to owner
             String ownerIdStr = fileEntity.getOwner().getId().toString();
             Path expectedBasePath = Paths.get(BASE_UPLOAD_DIR, ownerIdStr).toAbsolutePath().normalize();
             Path absoluteFilePath = filePath.isAbsolute() ? filePath : filePath.toAbsolutePath().normalize();
@@ -209,14 +209,18 @@ public class FileStorageService {
                 throw new AccessDeniedException("Invalid file path");
             }
             
+            if (!Files.exists(absoluteFilePath)) {
+                log.error("File does not exist on disk: {}. This may be due to ephemeral storage.", absoluteFilePath);
+                throw new ResourceNotFoundException("File not found on server. Files may be lost after server restart on free hosting.");
+            }
+            
             Resource resource = new UrlResource(absoluteFilePath.toUri());
             if (resource.exists() && resource.isReadable()) {
                 log.info("File loaded successfully: {}", absoluteFilePath);
                 return resource;
             } else {
-                log.error("File not found or not readable: {}. Exists: {}, Readable: {}", 
-                         absoluteFilePath, Files.exists(absoluteFilePath), Files.isReadable(absoluteFilePath));
-                throw new ResourceNotFoundException("File not found or not readable");
+                log.error("File exists but not readable: {}", absoluteFilePath);
+                throw new ResourceNotFoundException("File not readable");
             }
         } catch (IOException e) {
             log.error("Error loading file: {}", fileEntity.getFilePath(), e);
@@ -241,14 +245,24 @@ public class FileStorageService {
             throw new AccessDeniedException("You don't have permission to delete this file");
         }
         
-        // Delete file from disk
-        try {
-            Path filePath = Paths.get(fileEntity.getFilePath()).normalize();
-            Files.deleteIfExists(filePath);
-            log.info("File deleted from disk: {}", filePath);
-        } catch (IOException e) {
-            log.error("Failed to delete file from disk: {}", fileEntity.getFilePath(), e);
-            throw new FileStorageException("Failed to delete file from disk", e);
+        // Delete file from Cloudinary if exists
+        if (fileEntity.getCloudinaryPublicId() != null) {
+            try {
+                cloudinaryService.deleteFile(fileEntity.getCloudinaryPublicId());
+                log.info("File deleted from Cloudinary: {}", fileEntity.getCloudinaryPublicId());
+            } catch (IOException e) {
+                log.error("Failed to delete file from Cloudinary: {}", fileEntity.getCloudinaryPublicId(), e);
+                // Continue to delete from database even if Cloudinary delete fails
+            }
+        } else {
+            // Delete from local disk (for old files)
+            try {
+                Path filePath = Paths.get(fileEntity.getFilePath()).normalize();
+                Files.deleteIfExists(filePath);
+                log.info("File deleted from disk: {}", filePath);
+            } catch (IOException e) {
+                log.error("Failed to delete file from disk: {}", fileEntity.getFilePath(), e);
+            }
         }
         
         // Delete metadata from database
@@ -318,5 +332,92 @@ public class FileStorageService {
         if (size < 1024) return size + " B";
         int z = (63 - Long.numberOfLeadingZeros(size)) / 10;
         return String.format("%.1f %sB", (double) size / (1L << (z * 10)), " KMGTPE".charAt(z));
+    }
+    
+    @Transactional
+    public FileDTO copySharedFileToMyFolder(Long sharedFileId, String username, String folderPath) {
+        log.info("Copying shared file {} to user {}'s folder", sharedFileId, username);
+        
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+        
+        FileEntity originalFile = fileRepository.findById(sharedFileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found"));
+        
+        // Check if user has access to this file
+        boolean isShared = fileShareRepository.existsByFileAndSharedWith(originalFile, user);
+        if (!isShared && !originalFile.getOwner().getId().equals(user.getId())) {
+            throw new AccessDeniedException("You don't have access to this file");
+        }
+        
+        // If file is on Cloudinary, just create a new reference (no need to copy)
+        if (originalFile.getCloudinaryUrl() != null) {
+            log.info("Creating reference to Cloudinary file for user");
+            
+            FileEntity newFile = FileEntity.builder()
+                    .fileName(originalFile.getFileName())
+                    .originalFileName(originalFile.getOriginalFileName())
+                    .filePath(originalFile.getCloudinaryUrl())
+                    .cloudinaryUrl(originalFile.getCloudinaryUrl())
+                    .cloudinaryPublicId(originalFile.getCloudinaryPublicId())
+                    .fileSize(originalFile.getFileSize())
+                    .contentType(originalFile.getContentType())
+                    .folderPath(folderPath)
+                    .owner(user)
+                    .isDeleted(false)
+                    .build();
+            
+            FileEntity savedFile = fileRepository.save(newFile);
+            log.info("File reference created successfully with id: {}", savedFile.getId());
+            
+            return convertToDTO(savedFile);
+        }
+        
+        // Fallback: Copy from local storage (for old files)
+        try {
+            Path userDir = Paths.get(BASE_UPLOAD_DIR, user.getId().toString());
+            if (folderPath != null && !folderPath.isEmpty()) {
+                userDir = userDir.resolve(folderPath);
+            }
+            Files.createDirectories(userDir);
+            
+            String originalFileName = originalFile.getOriginalFileName();
+            String fileExtension = "";
+            int dotIndex = originalFileName.lastIndexOf('.');
+            if (dotIndex > 0) {
+                fileExtension = originalFileName.substring(dotIndex);
+            }
+            String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
+            Path newFilePath = userDir.resolve(uniqueFileName);
+            
+            Path originalPath = Paths.get(originalFile.getFilePath()).toAbsolutePath().normalize();
+            
+            if (!Files.exists(originalPath)) {
+                throw new FileStorageException("Original file not found on disk. File may have been lost due to server restart.");
+            }
+            
+            Files.copy(originalPath, newFilePath, StandardCopyOption.REPLACE_EXISTING);
+            log.info("File copied from {} to {}", originalPath, newFilePath);
+            
+            FileEntity newFile = FileEntity.builder()
+                    .fileName(uniqueFileName)
+                    .originalFileName(originalFileName)
+                    .filePath(newFilePath.toString())
+                    .fileSize(originalFile.getFileSize())
+                    .contentType(originalFile.getContentType())
+                    .folderPath(folderPath)
+                    .owner(user)
+                    .isDeleted(false)
+                    .build();
+            
+            FileEntity savedFile = fileRepository.save(newFile);
+            log.info("File copied successfully with id: {}", savedFile.getId());
+            
+            return convertToDTO(savedFile);
+            
+        } catch (IOException e) {
+            log.error("Failed to copy file", e);
+            throw new FileStorageException("Failed to copy file to your folder", e);
+        }
     }
 }

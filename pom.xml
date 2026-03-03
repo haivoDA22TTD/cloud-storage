@@ -82,6 +82,13 @@
             <artifactId>webauthn-server-core</artifactId>
             <version>2.4.0</version>
         </dependency>
+        
+        <!-- Cloudinary for File Storage -->
+        <dependency>
+            <groupId>com.cloudinary</groupId>
+            <artifactId>cloudinary-http44</artifactId>
+            <version>1.38.0</version>
+        </dependency>
     </dependencies>
     
     <build>

@@ -476,7 +476,7 @@
                     : '<div style="background: #48bb78; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; text-align: center; margin: 0.5rem 0;">Chỉ xem</div>';
                 
                 const deleteButton = permission === 'edit'
-                    ? `<button class="btn btn-danger" onclick="event.stopPropagation(); moveToTrash(${file.id})" title="Xóa">
+                    ? `<button class="btn btn-danger" onclick="event.stopPropagation(); moveToTrash(${file.id})" title="Xóa" style="flex: 1;">
                         <i class="fas fa-trash"></i>
                        </button>`
                     : '';
@@ -487,8 +487,11 @@
                         <div class="file-name" title="${file.fileName}">${file.fileName}</div>
                         <div class="file-meta">${file.fileSizeFormatted || formatFileSize(file.fileSize)}</div>
                         ${permissionBadge}
-                        <div class="file-actions">
-                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.fileName)}')" title="Tải xuống">
+                        <div class="file-actions" style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); copyToMyFolder(${file.id}, '${escapeHtml(file.fileName)}')" title="Lưu vào thư mục của tôi" style="flex: 1;">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); downloadFile(${file.id}, '${escapeHtml(file.fileName)}')" title="Tải xuống" style="flex: 1;">
                                 <i class="fas fa-download"></i>
                             </button>
                             ${deleteButton}
@@ -590,6 +593,25 @@
         function closePreviewModal() {
             document.getElementById('previewModal').style.display = 'none';
             document.getElementById('previewContent').innerHTML = '';
+        }
+        
+        async function copyToMyFolder(fileId, fileName) {
+            if (!confirm(`Lưu file "${fileName}" vào thư mục của bạn?`)) return;
+            
+            try {
+                const response = await fetch(`/api/files/${fileId}/copy-to-my-folder`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Không thể sao chép file');
+                }
+                
+                showToast('File đã được lưu vào thư mục của bạn!', 'success');
+            } catch (error) {
+                showToast('Lỗi: ' + error.message, 'error');
+            }
         }
         
         window.onclick = function(event) {
